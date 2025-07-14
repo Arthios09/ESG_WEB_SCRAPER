@@ -1,0 +1,23 @@
+{
+  "company": "Apple Inc",
+  "source_url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+  "pdf_filename": "test_apple_esg_report.pdf",
+  "total_pages": 1,
+  "total_chunks": 1,
+  "total_text_length": 16,
+  "pdf_info": {
+    "PDFFormatVersion": "1.4",
+    "IsAcroFormPresent": false,
+    "IsXFAPresent": false,
+    "Author": "Evangelos Vlachogiannis",
+    "Creator": "Writer",
+    "Producer": "OpenOffice.org 2.1",
+    "CreationDate": "D:20070223175637+02'00'"
+  },
+  "esg_keywords": {
+    "environmental": {},
+    "social": {},
+    "governance": {}
+  },
+  "processed_at": "2025-07-14T20:31:20.427Z"
+}

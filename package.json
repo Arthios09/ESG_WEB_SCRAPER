@@ -1,0 +1,31 @@
+{
+  "name": "esg-scraper",
+  "version": "1.0.0",
+  "description": "A Node.js application to scrape ESG report information using Puppeteer",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "quick": "node quick-start.js",
+    "example": "node example.js",
+    "test-pdf": "node test-pdf.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "esg",
+    "scraping",
+    "puppeteer",
+    "reports",
+    "sustainability"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0-rc.12",
+    "dotenv": "^16.3.0",
+    "pdf-parse": "^1.1.1",
+    "puppeteer": "^21.0.0"
+  }
+}
