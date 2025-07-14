@@ -15,7 +15,8 @@ A Node.js application that finds and extracts ESG (Environmental, Social, and Go
 ```bash
 git clone <repository-url>
 cd esg-scraper
-npm install
+INSTALL JS
+npm install puppeteer
 ```
 
 ## Usage
