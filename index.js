@@ -18,7 +18,7 @@ class ESGScraper {
         
         // Launch browser with specific options for better performance
         this.browser = await puppeteer.launch({
-            headless: true, // Set to true for production
+            headless: true, // TRUE FOR NORMAL USE (HEADLESS MODE OFF)
             defaultViewport: { width: 1920, height: 1080 },
             args: [
                 '--no-sandbox',
@@ -57,6 +57,7 @@ class ESGScraper {
             let usedEngine = 'google';
             if (!url) {
                 // Default to Google search for ESG reports
+                //GOOGLE IS BROKEN PLEASE REMOVE
                 url = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' ESG report sustainability')}`;
             }
 
@@ -99,7 +100,7 @@ class ESGScraper {
                 const evalResults = await this.page.evaluate(() => {
                     const results = [];
                     const foundLinks = [];
-                    // Try multiple approaches to find search results
+                    // USE NEW SELECTORS
                     const selectors = [
                         'div.g a[href]',
                         'div[data-sokoban-container] a[href]',
@@ -147,7 +148,7 @@ class ESGScraper {
             console.log('🔗 All found links on search page:');
             foundLinks.forEach((l, i) => console.log(`${i + 1}. ${l.title} -> ${l.href}`));
 
-            // Fallback to Bing if no results found
+            // REVERT BING
             if (searchResults.length === 0 && !searchUrl) {
                 console.log('🔄 No results from Google, trying Bing...');
                 usedEngine = 'bing';
@@ -156,7 +157,7 @@ class ESGScraper {
                 const rawHTMLBing = await this.page.content();
                 await fs.writeFile(`debug_search_results_${usedEngine}.html`, rawHTMLBing);
                 console.log(`📝 Saved raw HTML of Bing search results to debug_search_results_${usedEngine}.html`);
-                // Try to extract links from Bing
+                // USE BING
                 searchResults = await this.page.evaluate(() => {
                     const results = [];
                     const links = document.querySelectorAll('li.b_algo h2 a');
@@ -180,7 +181,7 @@ class ESGScraper {
 
             console.log(`📊 Found ${searchResults.length} potential ESG sources`);
 
-            // Process each result to find ESG reports
+            // Process RESULTS
             for (const result of searchResults) {
                 if (this.isESGRelated(result.title, result.snippet)) {
                     const esgData = await this.extractESGData(result.url, companyName);
@@ -212,6 +213,7 @@ class ESGScraper {
         return esgKeywords.some(keyword => text.includes(keyword));
     }
 
+    //IGNORE NO LONGER USED
     async extractESGData(url, companyName) {
         try {
             console.log(`📄 Extracting data from: ${url}`);
@@ -289,7 +291,7 @@ class ESGScraper {
                 return data;
             }, companyName);
 
-            // Add PDF information to the data
+            // PDF INFO --> DATA
             esgData.pdfs = pdfLinks;
 
             return esgData;
@@ -309,16 +311,9 @@ class ESGScraper {
                 allLinks.forEach(link => {
                     const href = link.href.toLowerCase();
                     const text = link.textContent.toLowerCase();
-                    // Check if it's a PDF link
-                    if (href.includes('.pdf') || 
-                        text.includes('pdf') || 
-                        text.includes('download') ||
-                        text.includes('report') ||
-                        text.includes('esg') ||
-                        text.includes('sustainability') ||
-                        text.includes('environmental') ||
-                        text.includes('social') ||
-                        text.includes('governance')) { //ADD MORE KEYWORDS HERE (CONFLICT, EMPLOYEE, SOCIETY)
+                    
+                    // Only collect actual PDF files
+                    if (href.includes('.pdf') || href.endsWith('.pdf')) {
                         links.push({
                             url: link.href,
                             text: link.textContent.trim(),
@@ -328,8 +323,7 @@ class ESGScraper {
                 });
                 return links;
             });
-            console.log(`📎 Found ${pdfLinks.length} potential PDF links`);
-            // Only return the found links, do not process or download
+            console.log(`📎 Found ${pdfLinks.length} PDF files`);
             return pdfLinks;
         } catch (error) {
             console.error(`❌ Error finding PDFs on ${url}:`, error.message);
@@ -346,7 +340,7 @@ class ESGScraper {
         // Clean link text
         const cleanText = linkText.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase().substring(0, 50);
         
-        // Extract filename from URL if possible
+        // Extract FILE_NAME
         const urlParts = url.split('/');
         const urlFilename = urlParts[urlParts.length - 1];
         
@@ -357,7 +351,7 @@ class ESGScraper {
             filename = `${cleanText}.pdf`;
         }
         
-        // Ensure it's a PDF
+        // MAKE SURE ITS A PDF
         if (!filename.endsWith('.pdf')) {
             filename += '.pdf';
         }
@@ -455,7 +449,29 @@ async function main() {
         scraper.results.forEach(result => {
             if (result.pdfs) {
                 result.pdfs = result.pdfs.filter(pdf => {
-                    return yearsToInclude.some(year => pdf.url.includes(year) || pdf.text.includes(year) || pdf.title.includes(year));
+                    return yearsToInclude.some(year => {
+                        // Check URL for year in filename or path
+                        const urlLower = pdf.url.toLowerCase();
+                        if (urlLower.includes(`/${year}/`) || urlLower.includes(`_${year}`) || urlLower.includes(`${year}.pdf`)) {
+                            return true;
+                        }
+                        
+                        // Check text for standalone year (not part of other numbers)
+                        const textLower = pdf.text.toLowerCase();
+                        const titleLower = pdf.title.toLowerCase();
+                        
+                        // Look for year patterns like "2024", "FY2024", "2024 Report", etc.
+                        const yearPatterns = [
+                            new RegExp(`\\b${year}\\b`), // standalone year
+                            new RegExp(`fy${year}\\b`, 'i'), // FY2024
+                            new RegExp(`\\b${year}\\s+(report|sustainability|esg)`, 'i'), // 2024 Report
+                            new RegExp(`(report|sustainability|esg)\\s+${year}\\b`, 'i') // Report 2024
+                        ];
+                        
+                        return yearPatterns.some(pattern => 
+                            pattern.test(textLower) || pattern.test(titleLower)
+                        );
+                    });
                 });
             }
         });
