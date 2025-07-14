@@ -16,10 +16,10 @@ class ESGScraper {
     async initialize() {
         console.log('🚀 Initializing ESG Scraper...');
         
-        // Launch browser with specific options for better performance
+        // Launch browser with realistic settings to avoid detection
         this.browser = await puppeteer.launch({
-            headless: true, // TRUE FOR NORMAL USE (HEADLESS MODE OFF)
-            defaultViewport: { width: 1920, height: 1080 },
+            headless: true, // Set to true for production
+            defaultViewport: { width: 1366, height: 768 },
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -27,14 +27,51 @@ class ESGScraper {
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--disable-gpu'
+                '--disable-gpu',
+                '--disable-web-security',
+                '--disable-features=VizDisplayCompositor',
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding',
+                '--disable-field-trial-config',
+                '--disable-ipc-flooding-protection',
+                '--disable-hang-monitor',
+                '--disable-prompt-on-repost',
+                '--disable-client-side-phishing-detection',
+                '--disable-component-extensions-with-background-pages',
+                '--disable-default-apps',
+                '--disable-extensions',
+                '--disable-sync',
+                '--disable-translate',
+                '--hide-scrollbars',
+                '--mute-audio',
+                '--no-default-browser-check',
+                '--safebrowsing-disable-auto-update',
+                '--disable-blink-features=AutomationControlled'
             ]
         });
 
         this.page = await this.browser.newPage();
         
-        // Set user agent to avoid detection
+        // Set realistic user agent
         await this.page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
+        
+        // Set additional headers to look more realistic
+        await this.page.setExtraHTTPHeaders({
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+            'Sec-Ch-Ua-Mobile': '?0',
+            'Sec-Ch-Ua-Platform': '"macOS"',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Sec-Fetch-User': '?1',
+            'Upgrade-Insecure-Requests': '1'
+        });
         
         // Enable request interception for better performance
         await this.page.setRequestInterception(true);
@@ -53,147 +90,82 @@ class ESGScraper {
         try {
             console.log(`🔍 Scraping ESG data for: ${companyName}`);
             
-            let url = searchUrl;
-            let usedEngine = 'google';
-            if (!url) {
-                // Default to Google search for ESG reports
-                //GOOGLE IS BROKEN PLEASE REMOVE
-                url = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' ESG report sustainability')}`;
-            }
-
-            await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+            // Direct approach: try common ESG/sustainability URLs for the company
+            const potentialUrls = this.generateESGUrls(companyName);
             
-            // DEBUG: Output the raw HTML of the search results page
-            const rawHTML = await this.page.content();
-            await fs.writeFile(`debug_search_results_${usedEngine}.html`, rawHTML);
-            console.log(`📝 Saved raw HTML of search results to debug_search_results_${usedEngine}.html`);
-            
-            // Wait for search results to load (try multiple selectors)
-            let searchResults = [];
-            let foundLinks = [];
-            try {
-                // Try different Google search result selectors
-                const selectors = [
-                    'div.g',
-                    'div[data-sokoban-container]',
-                    'div[jscontroller]',
-                    'a[href]:not([href*="google.com"])'
-                ];
-                
-                let foundSelector = false;
-                for (const selector of selectors) {
-                    try {
-                        await this.page.waitForSelector(selector, { timeout: 5000 });
-                        foundSelector = true;
-                        break;
-                    } catch (e) {
-                        continue;
-                    }
-                }
-                
-                if (!foundSelector) {
-                    // If no specific selector found, wait for any content
-                    await this.page.waitForTimeout(3000);
-                }
-                
-                // Extract search results with more flexible selectors
-                const evalResults = await this.page.evaluate(() => {
-                    const results = [];
-                    const foundLinks = [];
-                    // USE NEW SELECTORS
-                    const selectors = [
-                        'div.g a[href]',
-                        'div[data-sokoban-container] a[href]',
-                        'div[jscontroller] a[href]',
-                        'a[href]:not([href*="google.com"]):not([href*="youtube.com"])'
-                    ];
+            for (const url of potentialUrls) {
+                try {
+                    console.log(`🔍 Trying: ${url}`);
+                    await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 15000 });
                     
-                    for (const selector of selectors) {
-                        const links = document.querySelectorAll(selector);
-                        if (links.length > 0) {
-                            links.forEach(link => {
-                                const href = link.href;
-                                const title = link.querySelector('h3')?.textContent || 
-                                            link.querySelector('div')?.textContent || 
-                                            link.textContent || '';
-                                const snippet = link.closest('div')?.querySelector('div')?.textContent || '';
-                                foundLinks.push({ href, title });
-                                if (href && title && !href.includes('google.com') && !href.includes('youtube.com')) {
-                                    results.push({
-                                        title: title.trim(),
-                                        url: href,
-                                        snippet: snippet.trim()
-                                    });
+                    // Check if page loaded successfully and is not an error page
+                    const pageTitle = await this.page.title();
+                    const pageContent = await this.page.content();
+                    
+                    if (this.isValidPage(pageTitle, pageContent)) {
+                        console.log(`✅ Found working page: ${pageTitle}`);
+                        
+                        // Extract data from this page
+                        const esgData = await this.extractESGData(url, companyName);
+                        
+                        if (esgData && esgData.pdfs && esgData.pdfs.length > 0) {
+                            this.results.push({
+                                company: companyName,
+                                source: pageTitle,
+                                url: url,
+                                data: esgData,
+                                pdfs: esgData.pdfs || [],
+                                scrapedAt: new Date().toISOString()
+                            });
+                            console.log(`📄 Found ${esgData.pdfs.length} PDFs on ${url}`);
+                        }
+                        
+                        // Also check for subpages that might contain PDFs (like reporting-disclosures)
+                        if (esgData && esgData.pdfs) {
+                            const subpageLinks = esgData.pdfs.filter(link => 
+                                link.text.toLowerCase().includes('reporting') ||
+                                link.text.toLowerCase().includes('disclosure') ||
+                                link.text.toLowerCase().includes('download') ||
+                                link.text.toLowerCase().includes('reports')
+                            );
+                            
+                            for (const subpageLink of subpageLinks.slice(0, 3)) { // Limit to 3 subpages
+                                try {
+                                    console.log(`🔍 Following subpage: ${subpageLink.text} -> ${subpageLink.url}`);
+                                    await this.page.goto(subpageLink.url, { waitUntil: 'networkidle2', timeout: 15000 });
+                                    
+                                    const subpageTitle = await this.page.title();
+                                    const subpageContent = await this.page.content();
+                                    
+                                    if (this.isValidPage(subpageTitle, subpageContent)) {
+                                        console.log(`✅ Found working subpage: ${subpageTitle}`);
+                                        
+                                        const subpageData = await this.extractESGData(subpageLink.url, companyName);
+                                        
+                                        if (subpageData && subpageData.pdfs && subpageData.pdfs.length > 0) {
+                                            this.results.push({
+                                                company: companyName,
+                                                source: subpageTitle,
+                                                url: subpageLink.url,
+                                                data: subpageData,
+                                                pdfs: subpageData.pdfs || [],
+                                                scrapedAt: new Date().toISOString()
+                                            });
+                                            console.log(`📄 Found ${subpageData.pdfs.length} PDFs on subpage ${subpageLink.url}`);
+                                        }
+                                    }
+                                } catch (error) {
+                                    console.log(`⚠️  Could not access subpage ${subpageLink.url}: ${error.message}`);
+                                    continue;
                                 }
-                            });
-                            break; // Use first successful selector
+                            }
                         }
+                    } else {
+                        console.log(`❌ Page not found or invalid: ${pageTitle}`);
                     }
-                    // DEBUG: Return all found links for logging
-                    return { results: results.slice(0, 5), foundLinks };
-                });
-                foundLinks = evalResults.foundLinks || [];
-                searchResults = evalResults.results || [];
-            } catch (error) {
-                console.log(`⚠️  Could not extract search results: ${error.message}`);
-                // Fallback: create a simple result for testing
-                searchResults = [{
-                    title: 'ESG Report Search',
-                    url: url,
-                    snippet: 'Search results could not be extracted'
-                }];
-            }
-
-            // DEBUG: Log all found links
-            console.log('🔗 All found links on search page:');
-            foundLinks.forEach((l, i) => console.log(`${i + 1}. ${l.title} -> ${l.href}`));
-
-            // REVERT BING
-            if (searchResults.length === 0 && !searchUrl) {
-                console.log('🔄 No results from Google, trying Bing...');
-                usedEngine = 'bing';
-                url = `https://www.bing.com/search?q=${encodeURIComponent(companyName + ' ESG report sustainability')}`;
-                await this.page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-                const rawHTMLBing = await this.page.content();
-                await fs.writeFile(`debug_search_results_${usedEngine}.html`, rawHTMLBing);
-                console.log(`📝 Saved raw HTML of Bing search results to debug_search_results_${usedEngine}.html`);
-                // USE BING
-                searchResults = await this.page.evaluate(() => {
-                    const results = [];
-                    const links = document.querySelectorAll('li.b_algo h2 a');
-                    links.forEach(link => {
-                        const href = link.href;
-                        const title = link.textContent || '';
-                        const snippet = link.closest('li.b_algo')?.querySelector('.b_caption p')?.textContent || '';
-                        if (href && title) {
-                            results.push({
-                                title: title.trim(),
-                                url: href,
-                                snippet: snippet.trim()
-                            });
-                        }
-                    });
-                    return results.slice(0, 5);
-                });
-                console.log('🔗 Bing found links:');
-                searchResults.forEach((l, i) => console.log(`${i + 1}. ${l.title} -> ${l.url}`));
-            }
-
-            console.log(`📊 Found ${searchResults.length} potential ESG sources`);
-
-            // Process RESULTS
-            for (const result of searchResults) {
-                if (this.isESGRelated(result.title, result.snippet)) {
-                    const esgData = await this.extractESGData(result.url, companyName);
-                    if (esgData) {
-                        this.results.push({
-                            company: companyName,
-                            source: result.title,
-                            url: result.url,
-                            data: esgData,
-                            scrapedAt: new Date().toISOString()
-                        });
-                    }
+                } catch (error) {
+                    console.log(`⚠️  Could not access ${url}: ${error.message}`);
+                    continue;
                 }
             }
 
@@ -202,11 +174,134 @@ class ESGScraper {
         }
     }
 
+        generateESGUrls(companyName) {
+        // Clean company name for URL generation
+        const cleanName = companyName.toLowerCase()
+            .replace(/[^a-z0-9]/g, '')
+            .replace(/\s+/g, '');
+        
+        // Handle multi-word company names (e.g., "Energy Recovery" -> "energyrecovery")
+        const words = companyName.toLowerCase().split(/\s+/);
+        const singleWordName = words.join('');
+        const hyphenatedName = words.join('-');
+        const underscoreName = words.join('_');
+        
+        // Common ESG/sustainability URL patterns with multiple name variations
+        const basePatterns = [
+            // Standard patterns with cleaned name
+            `https://www.${cleanName}.com/sustainability`,
+            `https://www.${cleanName}.com/esg`,
+            `https://www.${cleanName}.com/environmental`,
+            `https://www.${cleanName}.com/corporate-responsibility`,
+            `https://www.${cleanName}.com/responsibility`,
+            `https://www.${cleanName}.com/impact`,
+            `https://www.${cleanName}.com/about/sustainability`,
+            `https://www.${cleanName}.com/about/esg`,
+            `https://www.${cleanName}.com/investors/sustainability`,
+            `https://www.${cleanName}.com/investors/esg`,
+            `https://investors.${cleanName}.com/sustainability`,
+            `https://investors.${cleanName}.com/esg`,
+            `https://sustainability.${cleanName}.com`,
+            `https://esg.${cleanName}.com`,
+            
+            // Patterns with single word name (for multi-word companies)
+            `https://www.${singleWordName}.com/sustainability`,
+            `https://www.${singleWordName}.com/esg`,
+            `https://www.${singleWordName}.com/environmental`,
+            `https://www.${singleWordName}.com/corporate-responsibility`,
+            `https://www.${singleWordName}.com/responsibility`,
+            `https://www.${singleWordName}.com/impact`,
+            `https://www.${singleWordName}.com/about/sustainability`,
+            `https://www.${singleWordName}.com/about/esg`,
+            `https://www.${singleWordName}.com/investors/sustainability`,
+            `https://www.${singleWordName}.com/investors/esg`,
+            `https://investors.${singleWordName}.com/sustainability`,
+            `https://investors.${singleWordName}.com/esg`,
+            `https://sustainability.${singleWordName}.com`,
+            `https://esg.${singleWordName}.com`,
+            
+            // Patterns with hyphenated name
+            `https://www.${hyphenatedName}.com/sustainability`,
+            `https://www.${hyphenatedName}.com/esg`,
+            `https://www.${hyphenatedName}.com/environmental`,
+            `https://www.${hyphenatedName}.com/corporate-responsibility`,
+            `https://www.${hyphenatedName}.com/responsibility`,
+            `https://www.${hyphenatedName}.com/impact`,
+            `https://www.${hyphenatedName}.com/about/sustainability`,
+            `https://www.${hyphenatedName}.com/about/esg`,
+            `https://www.${hyphenatedName}.com/investors/sustainability`,
+            `https://www.${hyphenatedName}.com/investors/esg`,
+            `https://investors.${hyphenatedName}.com/sustainability`,
+            `https://investors.${hyphenatedName}.com/esg`,
+            `https://sustainability.${hyphenatedName}.com`,
+            `https://esg.${hyphenatedName}.com`,
+            
+            // Additional common patterns
+            `https://${cleanName}.com/sustainability`,
+            `https://${cleanName}.com/esg`,
+            `https://${cleanName}.com/environmental`,
+            `https://${cleanName}.com/corporate-responsibility`,
+            `https://${cleanName}.com/responsibility`,
+            `https://${cleanName}.com/impact`,
+            `https://${cleanName}.com/about/sustainability`,
+            `https://${cleanName}.com/about/esg`,
+            `https://${cleanName}.com/investors/sustainability`,
+            `https://${cleanName}.com/investors/esg`,
+            
+            // Without www prefix
+            `https://${singleWordName}.com/sustainability`,
+            `https://${singleWordName}.com/esg`,
+            `https://${singleWordName}.com/environmental`,
+            `https://${singleWordName}.com/corporate-responsibility`,
+            `https://${singleWordName}.com/responsibility`,
+            `https://${singleWordName}.com/impact`,
+            `https://${singleWordName}.com/about/sustainability`,
+            `https://${singleWordName}.com/about/esg`,
+            `https://${singleWordName}.com/investors/sustainability`,
+            `https://${singleWordName}.com/investors/esg`,
+            
+            `https://${hyphenatedName}.com/sustainability`,
+            `https://${hyphenatedName}.com/esg`,
+            `https://${hyphenatedName}.com/environmental`,
+            `https://${hyphenatedName}.com/corporate-responsibility`,
+            `https://${hyphenatedName}.com/responsibility`,
+            `https://${hyphenatedName}.com/impact`,
+            `https://${hyphenatedName}.com/about/sustainability`,
+            `https://${hyphenatedName}.com/about/esg`,
+            `https://${hyphenatedName}.com/investors/sustainability`,
+            `https://${hyphenatedName}.com/investors/esg`
+        ];
+        
+        // Add some variations for common company names
+        const variations = [];
+        if (companyName.toLowerCase().includes('boeing')) {
+            variations.push(
+                'https://www.boeing.com/sustainability',
+                'https://www.boeing.com/about/sustainability',
+                'https://www.boeing.com/company/sustainability'
+            );
+        } else if (companyName.toLowerCase().includes('apple')) {
+            variations.push(
+                'https://www.apple.com/environment',
+                'https://www.apple.com/supplier-responsibility',
+                'https://www.apple.com/accessibility'
+            );
+        } else if (companyName.toLowerCase().includes('microsoft')) {
+            variations.push(
+                'https://www.microsoft.com/en-us/corporate-responsibility',
+                'https://www.microsoft.com/en-us/sustainability',
+                'https://www.microsoft.com/en-us/accessibility'
+            );
+        }
+        
+        return [...variations, ...basePatterns];
+    }
+
     isESGRelated(title, snippet) {
         const esgKeywords = [
             'esg', 'environmental', 'social', 'governance', 'sustainability',
             'csr', 'corporate social responsibility', 'impact report',
-            'sustainability report', 'esg report', 'annual report'
+            'sustainability report', 'esg report', 'annual report', 'Sustainability'
         ];
         
         const text = (title + ' ' + snippet).toLowerCase();
@@ -305,25 +400,119 @@ class ESGScraper {
     async findPDFLinks(url, companyName) {
         try {
             console.log(`🔍 Looking for PDFs on: ${url}`);
+            
+            // First, let's see ALL links on the page for debugging
+            const allPageLinks = await this.page.evaluate(() => {
+                const links = [];
+                const allLinks = document.querySelectorAll('a[href]');
+                
+                allLinks.forEach(link => {
+                    links.push({
+                        url: link.href,
+                        text: link.textContent.trim(),
+                        title: link.title || '',
+                        className: link.className,
+                        id: link.id
+                    });
+                });
+                
+                return links;
+            });
+            
+            console.log(`🔗 Total links found on page: ${allPageLinks.length}`);
+            
+            // Now look for PDF links with improved detection
             const pdfLinks = await this.page.evaluate(() => {
                 const links = [];
                 const allLinks = document.querySelectorAll('a[href]');
+                
                 allLinks.forEach(link => {
                     const href = link.href.toLowerCase();
-                    const text = link.textContent.toLowerCase();
+                    const text = link.textContent.toLowerCase().trim();
+                    const title = (link.title || '').toLowerCase();
+                    const className = link.className.toLowerCase();
+                    const id = link.id.toLowerCase();
                     
-                    // Only collect actual PDF files
-                    if (href.includes('.pdf') || href.endsWith('.pdf')) {
+                    // Check for direct PDF links
+                    const isDirectPdf = href.includes('.pdf') || href.endsWith('.pdf');
+                    
+                    // Check for download links (broader criteria)
+                    const isDownloadLink = text.includes('download') || 
+                                         title.includes('download') ||
+                                         className.includes('download') ||
+                                         id.includes('download') ||
+                                         text.includes('get') ||
+                                         text.includes('view') ||
+                                         text.includes('open') ||
+                                         text.includes('access');
+                    
+                    // Check for report links (broader criteria)
+                    const isReportLink = text.includes('report') || 
+                                       title.includes('report') ||
+                                       text.includes('sustainability') ||
+                                       title.includes('sustainability') ||
+                                       text.includes('esg') ||
+                                       title.includes('esg') ||
+                                       text.includes('performance') ||
+                                       text.includes('summary') ||
+                                       text.includes('disclosure') ||
+                                       text.includes('statement') ||
+                                       text.includes('document') ||
+                                       text.includes('publication');
+                    
+                    // Check for button-like links that might be PDFs
+                    const isButtonLink = className.includes('btn') ||
+                                       className.includes('button') ||
+                                       id.includes('btn') ||
+                                       id.includes('button') ||
+                                       text.length < 20; // Short text often indicates buttons
+                    
+                    // Check for links that might be PDFs (more focused criteria)
+                    const mightBePdf = isDirectPdf || 
+                                     (isDownloadLink && (text.includes('pdf') || href.includes('pdf'))) || 
+                                     (isReportLink && (text.includes('pdf') || href.includes('pdf') || text.includes('download'))) ||
+                                     (isButtonLink && (text.includes('pdf') || href.includes('pdf') || text.includes('download'))) ||
+                                     text.includes('pdf') ||
+                                     title.includes('pdf') ||
+                                     className.includes('pdf') ||
+                                     id.includes('pdf') ||
+                                     href.includes('pdf');
+                    
+                    if (mightBePdf) {
                         links.push({
                             url: link.href,
                             text: link.textContent.trim(),
-                            title: link.title || ''
+                            title: link.title || '',
+                            className: link.className,
+                            id: link.id,
+                            isDirectPdf: isDirectPdf,
+                            isDownloadLink: isDownloadLink,
+                            isReportLink: isReportLink,
+                            isButtonLink: isButtonLink
                         });
                     }
                 });
+                
                 return links;
             });
-            console.log(`📎 Found ${pdfLinks.length} PDF files`);
+            
+            console.log(`📎 Found ${pdfLinks.length} potential PDF links:`);
+            pdfLinks.forEach((link, index) => {
+                console.log(`  ${index + 1}. "${link.text}" -> ${link.url}`);
+                console.log(`     Class: ${link.className}, ID: ${link.id}`);
+                console.log(`     Direct: ${link.isDirectPdf}, Download: ${link.isDownloadLink}, Report: ${link.isReportLink}, Button: ${link.isButtonLink}`);
+            });
+            
+            // Also show some non-PDF links for debugging
+            const nonPdfLinks = allPageLinks.filter(link => 
+                !pdfLinks.some(pdfLink => pdfLink.url === link.url)
+            ).slice(0, 10); // Show first 10 non-PDF links
+            
+            console.log(`🔗 Sample of other links on page:`);
+            nonPdfLinks.forEach((link, index) => {
+                console.log(`  ${index + 1}. "${link.text}" -> ${link.url}`);
+            });
+            
             return pdfLinks;
         } catch (error) {
             console.error(`❌ Error finding PDFs on ${url}:`, error.message);
@@ -414,6 +603,40 @@ class ESGScraper {
         // Clean up downloaded PDFs (optional - comment out if you want to keep them)
         // await this.pdfProcessor.cleanupDownloads();
     }
+
+    isValidPage(pageTitle, pageContent) {
+        // Check for common error indicators
+        const errorIndicators = [
+            '404', 'not found', 'page not found', 'error', 'does not exist',
+            'page unavailable', 'access denied', 'forbidden', 'unauthorized',
+            'server error', 'internal server error', 'service unavailable'
+        ];
+        
+        const titleLower = pageTitle.toLowerCase();
+        const contentLower = pageContent.toLowerCase();
+        
+        // Check if any error indicators are present in title or prominent content
+        for (const indicator of errorIndicators) {
+            if (titleLower.includes(indicator)) {
+                return false;
+            }
+        }
+        
+        // Check for error indicators in the first part of the content (more reliable)
+        const firstPart = contentLower.substring(0, 2000);
+        for (const indicator of errorIndicators) {
+            if (firstPart.includes(indicator)) {
+                return false;
+            }
+        }
+        
+        // Check if page has meaningful content (not just a blank page)
+        const hasContent = pageContent.length > 500; // Reduced minimum content length
+        const hasLinks = pageContent.includes('<a href');
+        const hasBodyContent = pageContent.includes('<body') && pageContent.includes('</body>');
+        
+        return hasContent && hasLinks && hasBodyContent;
+    }
 }
 
 // Main execution function
@@ -445,32 +668,41 @@ async function main() {
         for (const company of companies) {
             await scraper.scrapeCompanyESG(company);
         }
+        // Log summary of found PDFs before filtering
+        let totalPdfsFound = 0;
+        scraper.results.forEach((result, idx) => {
+            if (result.pdfs && result.pdfs.length > 0) {
+                totalPdfsFound += result.pdfs.length;
+                console.log(`📄 Found ${result.pdfs.length} PDFs on ${result.url}`);
+            }
+        });
+        console.log(`📊 Total PDFs found before filtering: ${totalPdfsFound}`);
+        console.log(`🔍 Filtering for years: ${yearsToInclude.join(', ')}`);
+
         // Filter PDF links in results to only include those with a year in yearsToInclude
         scraper.results.forEach(result => {
             if (result.pdfs) {
                 result.pdfs = result.pdfs.filter(pdf => {
                     return yearsToInclude.some(year => {
-                        // Check URL for year in filename or path
+                        // Check URL/filename for year
                         const urlLower = pdf.url.toLowerCase();
-                        if (urlLower.includes(`/${year}/`) || urlLower.includes(`_${year}`) || urlLower.includes(`${year}.pdf`)) {
+                        const textLower = pdf.text.toLowerCase();
+                        
+                        // Check for year in URL path, filename, or as part of .pdf filename
+                        if (urlLower.includes(`/${year}/`) || 
+                            urlLower.includes(`_${year}`) || 
+                            urlLower.includes(`${year}.pdf`) ||
+                            urlLower.includes(`-${year}.pdf`) ||
+                            urlLower.includes(`_${year}_`) ||
+                            urlLower.includes(`-${year}-`) ||
+                            urlLower.includes(`${year}-`) ||
+                            urlLower.includes(`-${year}`) ||
+                            urlLower.includes(`${year}`) ||
+                            textLower.includes(year)) {
                             return true;
                         }
                         
-                        // Check text for standalone year (not part of other numbers)
-                        const textLower = pdf.text.toLowerCase();
-                        const titleLower = pdf.title.toLowerCase();
-                        
-                        // Look for year patterns like "2024", "FY2024", "2024 Report", etc.
-                        const yearPatterns = [
-                            new RegExp(`\\b${year}\\b`), // standalone year
-                            new RegExp(`fy${year}\\b`, 'i'), // FY2024
-                            new RegExp(`\\b${year}\\s+(report|sustainability|esg)`, 'i'), // 2024 Report
-                            new RegExp(`(report|sustainability|esg)\\s+${year}\\b`, 'i') // Report 2024
-                        ];
-                        
-                        return yearPatterns.some(pattern => 
-                            pattern.test(textLower) || pattern.test(titleLower)
-                        );
+                        return false;
                     });
                 });
             }
